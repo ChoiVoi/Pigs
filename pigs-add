@@ -1,0 +1,37 @@
+#!/bin/dash
+
+if [ ! -d ".pig" ]; then
+    echo "pigs-add: error: pigs repository directory .pig not found"
+    exit 1
+fi
+
+if [ "$1" = "" ]; then
+    echo "usage: pigs-add <filenames>"
+    exit 1
+fi
+
+current_branch=$(head -n 1 .pig/branch_list)
+
+if [ ! -d ".pig/branch/$current_branch/index" ]; then
+    mkdir ".pig/branch/$current_branch/index"
+fi
+
+for file in "$@"; do
+    if [ -e "$file" ]; then
+        if cmp -s "$file" ".pig/branch/$current_branch/index/$file"; then
+                continue
+        else 
+            cp "$file" ".pig/branch/$current_branch/index"
+        fi
+    elif [ -e ".pig/branch/$current_branch/index/$file" ]; then
+        if [ ! -e "./$file" ]; then
+            if [ ! -d ".pig/branch/$current_branch/current_directory_delete_list" ]; then
+                mkdir ".pig/branch/$current_branch/current_directory_delete_list"
+            fi
+            mv ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/current_directory_delete_list/"
+        fi
+    else 
+        echo "pigs-add: error: can not open '$file'"
+        exit 1
+    fi
+done

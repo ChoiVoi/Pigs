@@ -1,0 +1,66 @@
+#!/bin/dash
+
+if [ ! -d ".pig" ]; then
+    echo "pigs-status: error: pigs repository directory .pig not found" 2>&1
+    exit 1
+fi
+
+commit_num=0
+current_branch=$(head -n 1 .pig/branch_list)
+
+while [ -e ".pig/branch/$current_branch/commit/$commit_num" ]; do
+    commit_num=$((commit_num+1))
+done
+
+tempfile=$(mktemp)
+file_tracker=$(mktemp)
+
+for file in *; do
+    echo "$file" >> "$tempfile"
+done
+
+for file in ".pig/branch/$current_branch/index/"*;do
+    file_name="$(basename "$file")"
+    echo "$file_name" >> "$tempfile"
+done
+
+for file in ".pig/branch/$current_branch/commit/$((commit_num-1))/"*; do
+    file_name="$(basename "$file")"
+    if [ "$file_name" != "message" ]; then
+        echo "$file_name" >> "$tempfile"
+    fi
+done
+
+sort "$tempfile" | uniq > "$file_tracker"
+rm -f "$tempfile"
+
+while IFS= read -r file; do
+    if [ -e ".pig/branch/$current_branch/index/$file" ] && [ -e "$file" ] && [ -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ]; then
+        if ! diff ".pig/branch/$current_branch/index/$file" "$file">/dev/null && diff ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/commit/$((commit_num-1))/$file">/dev/null; then
+            echo "$file - file changed, changes not staged for commit"
+        elif diff ".pig/branch/$current_branch/index/$file" "$file">/dev/null && ! diff ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/commit/$((commit_num-1))/$file">/dev/null; then
+            echo "$file - file changed, changes staged for commit"
+        elif ! diff ".pig/branch/$current_branch/index/$file" "$file">/dev/null && ! diff ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/commit/$((commit_num-1))/$file">/dev/null; then
+            echo "$file - file changed, different changes staged for commit"
+        else 
+            echo "$file - same as repo"
+        fi
+    elif [ -e ".pig/branch/$current_branch/index/$file" ] && [ ! -e "$file" ] && [ -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ]; then
+        echo "$file - file deleted"
+    elif [ -e ".pig/branch/$current_branch/index/$file" ] && [ ! -e "$file" ]; then
+        echo "$file - added to index, file deleted"
+    elif [ -e ".pig/branch/$current_branch/index/$file" ] && [ -e "$file" ] && ! diff ".pig/branch/$current_branch/index/$file" "$file">/dev/null; then
+        echo "$file - added to index, file changed"
+    elif [ -e "$file" ] && [ ! -e ".pig/branch/$current_branch/index/$file" ] && [ ! -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ]; then
+        echo "$file - untracked"
+    elif [ ! -e ".pig/branch/$current_branch/index/$file" ] && [ ! -e "$file" ] && [ -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ]; then
+        echo "$file - file deleted, deleted from index"
+    elif [ ! -e ".pig/branch/$current_branch/index/$file" ] && [ -e "$file" ] && [ -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ]; then
+        echo "$file - deleted from index"
+    elif [ -e ".pig/branch/$current_branch/index/$file" ] && [ -e "$file" ] && [ ! -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ]; then
+        echo "$file - added to index"
+    fi
+done < "$file_tracker"
+
+rm -f "$file_tracker"
+exit 0

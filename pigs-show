@@ -1,0 +1,35 @@
+#!/bin/dash
+
+if [ ! -d ".pig" ]; then
+    echo "pigs-show: error: pigs repository directory .pig not found" 2>&1
+    exit 1
+fi
+
+arg=$1
+if ! echo "$arg" | grep -q ":" ; then
+    echo "usage: pigs-show <commit>:<filename>"
+    exit 1
+fi
+
+commit_num=$(echo "$arg" | cut -d ":" -f1)
+file_name=$(echo "$arg" | cut -d ":" -f2)
+current_branch=$(head -n 1 .pig/branch_list)
+
+if [ -z "$commit_num" ]; then
+    if [ -e ".pig/branch/$current_branch/index/$file_name" ]; then
+        cat ".pig/branch/$current_branch/index/$file_name" 
+    else
+        echo "pigs-show: error: '$file_name' not found in index" 1>&2
+        exit 1
+    fi
+else
+    if [ ! -e ".pig/branch/$current_branch/commit/$commit_num" ]; then
+        echo "pigs-show: error: unknown commit '$commit_num'"
+        exit 1
+    elif [ -e ".pig/branch/$current_branch/commit/$commit_num/$file_name" ]; then
+        cat ".pig/branch/$current_branch/commit/$commit_num/$file_name"
+    else
+        echo "pigs-show: error: '$file_name' not found in commit $commit_num" 1>&2
+        exit 1
+    fi
+fi

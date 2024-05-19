@@ -1,0 +1,104 @@
+#!/bin/dash
+
+if [ ! -d ".pig" ]; then
+    echo "pigs-rm: error: pigs repository directory .pig not found"
+    exit 1
+fi
+
+force=0
+cached=0
+commit_num=0
+
+current_branch=$(head -n 1 .pig/branch_list)
+
+while [ -e ".pig/branch/$current_branch/commit/$commit_num" ]; do
+    commit_num=$((commit_num+1))
+done
+
+if [ ! -d ".pig/branch/$current_branch/index_delete_list" ]; then
+    mkdir ".pig/branch/$current_branch/index_delete_list"
+fi
+
+if [ ! -d ".pig/branch/$current_branch/current_directory_delete_list" ]; then
+    mkdir ".pig/branch/$current_branch/current_directory_delete_list"
+fi
+
+for arg in "$@"; do
+    if [ "$arg" = "--force" ]; then
+        force=1
+    elif [ "$arg" = "--cached" ]; then
+        cached=1
+    elif [ "${arg#-}" != "$arg" ] && [ "$arg" != "--force" ] && [ "$arg" != "--cached" ]; then
+        echo "usage: pigs-rm [--force] [--cached] <filenames>"
+        exit 1
+    else
+        if [ ! -f ".pig/branch/$current_branch/index/$arg" ]; then
+            echo "pigs-rm: error: '$arg' is not in the pigs repository"
+            exit 1
+        fi
+    fi
+done 
+
+if [ $force -eq 1 ] && [ $cached -eq 1 ]; then
+    for file in "$@"; do 
+        if [ "$file" = "--force" ] || [ "$file" = "--cached" ]; then
+            continue
+        else
+            mv ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/index_delete_list/"
+        fi
+    done
+    exit 0
+
+elif [ $force -eq 1 ] && [ $cached -eq 0 ]; then
+    for file in "$@"; do
+        if [ "$file" = "--force" ]; then
+            continue
+        else
+            mv ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/index_delete_list/"
+            rm -f "$file"
+        fi
+    done
+    exit 0
+
+elif [ $force -eq 0 ] && [ $cached -eq 1 ]; then
+    for file in "$@"; do
+        if [ "$file" = "--cached" ]; then
+            continue
+        else
+            if [ -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ]; then
+                if ! diff -q ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" >/dev/null && ! diff -q ".pig/branch/$current_branch/index/$file" "$file" >/dev/null; then
+                    echo "pigs-rm: error: '$file' in index is different to both the working file and the repository"
+                    exit 1
+                else
+                    if [ ! -d ".pig/branch/$current_branch/index_delete_list" ]; then
+                        mkdir ".pig/branch/$current_branch/index_delete_list"
+                    fi
+                    mv ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/index_delete_list/"
+                fi
+            else 
+                mv ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/index_delete_list/"
+            fi
+        fi
+    done
+
+elif [ $force -eq 0 ] && [ $cached -eq 0 ]; then
+    for file in "$@"; do
+        if { [ ! -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ] || ! diff -q ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/commit/$((commit_num-1))/$file"> /dev/null; }  && ! diff -q ".pig/branch/$current_branch/index/$file" "$file"> /dev/null; then
+            echo "pigs-rm: error: '$file' in index is different to both the working file and the repository"
+            exit 1
+        elif [ ! -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ] || ! diff -q ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ".pig/branch/$current_branch/index/$file"> /dev/null; then
+            echo "pigs-rm: error: '$file' has staged changes in the index"
+            exit 1
+        elif ! diff -q ".pig/branch/$current_branch/index/$file" "$file" >/dev/null && diff -q ".pig/branch/$current_branch/commit/$((commit_num-1))/$file" ".pig/branch/$current_branch/index/$file"> /dev/null; then
+            echo "pigs-rm: error: '$file' in the repository is different to the working file"
+            exit 1
+        else
+            mv ".pig/branch/$current_branch/index/$file" ".pig/branch/$current_branch/index_delete_list/"
+            if [ -f "$file" ]; then
+                mv "$file" ".pig/branch/$current_branch/current_directory_delete_list/"
+            fi
+            exit 0
+        fi
+    done
+    exit 0
+fi

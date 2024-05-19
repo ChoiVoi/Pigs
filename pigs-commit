@@ -1,0 +1,148 @@
+#!/bin/dash
+
+if [ ! -d ".pig" ]; then
+    echo "./pigs-commit: error: .pig directory not found" 1>&2
+    exit 1
+fi
+
+if [ ! "$1" = "-m" ] && [ ! "$1" = "-a" ]; then
+    echo "usage: pigs-commit [-a] -m commit-message" 1>&2
+    exit 1
+fi
+
+if [ "$1" = "-a" ] && [ "$2" != "-m" ]; then
+    echo "usage: pigs-commit [-a] -m commit-message" 1>&2
+    exit 1
+fi
+
+if [ "$1" = "-m" ]; then
+    msg="$2"
+elif [ "$2" = "-m" ]; then
+    msg="$3"
+fi
+
+current_branch=$(head -n 1 .pig/branch_list)
+
+if [ ! -d ".pig/branch/$current_branch/commit" ]; then
+    mkdir ".pig/branch/$current_branch/commit"
+fi
+
+if [ "$1" = "-a" ]; then
+    for file in ".pig/branch/$current_branch/index/"*; do
+        if [ -f "$file" ]; then 
+            base_file=$(basename "$file")
+            if [ -f "$base_file" ]; then
+                cp "$base_file" "$file" 
+            fi
+        else 
+            echo "nothing to commit"
+            exit 1
+        fi
+    done
+fi
+
+if [ ! -d ".pig/branch/$current_branch/index" ]; then
+    echo "nothing to commit"
+    exit 1
+fi
+
+changes_exist=0
+
+if [ -z "$(find .pig/branch/"${current_branch}"/index -type f)" ]; then 
+    if [ -d ".pig/branch/$current_branch/index_delete_list" ]; then
+        if [ -z "$(find .pig/branch/"${current_branch}"/index_delete_list -type f)" ]; then
+            echo "nothing to commit"
+            exit 1
+        else 
+            changes_exist=1
+        fi
+    elif [ -d ".pig/branch/$current_branch/current_directory_delete_list" ]; then 
+        if [ -z "$(find .pig/branch/"${current_branch}"/current_directory_delete_list -type f)" ]; then
+            echo "nothing to commit"
+            exit 1
+        else 
+            changes_exist=1
+        fi
+    else
+        changes_exist=1
+    fi
+    if [ $changes_exist -eq 0 ]; then
+        echo "nothing to commit"
+        exit 0
+    fi
+fi
+
+commit_num=0
+
+while [ -e ".pig/branch/$current_branch/commit/$commit_num" ]; do
+    commit_num=$((commit_num+1))
+done
+
+for file in ".pig/branch/$current_branch/index/"*; do
+    file_name=$(basename "$file")
+    if [ $commit_num -gt 0 ]; then
+        if [ ! -e ".pig/branch/$current_branch/commit/$((commit_num-1))/$file_name" ] || ! diff -q "$file" ".pig/branch/$current_branch/commit/$((commit_num-1))/$file_name" >/dev/null; then 
+            changes_exist=1
+        fi
+    else
+        changes_exist=1
+        break
+    fi
+done
+
+for file in ".pig/branch/$current_branch/commit/$((commit_num-1))/"*; do
+    file_name=$(basename "$file")
+    if [ -e ".pig/branch/$current_branch/current_directory_delete_list/$file_name" ]; then
+        changes_exist=1
+    elif [ -e ".pig/branch/$current_branch/index_delete_list/$file_name" ]; then
+        changes_exist=1
+    fi
+done
+
+if [ $changes_exist -eq 0 ]; then
+    echo "nothing to commit"
+    exit 0
+fi
+
+mkdir ".pig/branch/$current_branch/commit/$commit_num"
+
+if [ ! -f ".pig/total_commit_num" ]; then
+    echo "0" > ".pig/total_commit_num"
+else
+    total=$(head -n 1 .pig/total_commit_num)
+    echo $((total+1)) > ".pig/total_commit_num"
+fi
+
+echo "$msg" > ".pig/branch/$current_branch/commit/$commit_num/message"
+
+for file in ".pig/branch/$current_branch/index/"*; do
+    file_name=$(basename "$file")
+    if [ -e "$file" ]; then
+        cp "$file" ".pig/branch/$current_branch/commit/$commit_num/$file_name"
+    fi
+done
+
+if [ ! -d ".pig/branch/$current_branch/deleted_log" ]; then
+    mkdir ".pig/branch/$current_branch/deleted_log"
+fi
+
+if [ -d ".pig/branch/$current_branch/current_directory_delete_list" ]; then
+    for file in ".pig/branch/$current_branch/current_directory_delete_list/"*; do 
+        if [ -f "$file" ]; then
+            mv "$file" ".pig/branch/$current_branch/deleted_log/"
+        fi
+    done
+fi
+
+if [ -d ".pig/branch/$current_branch/index_delete_list" ]; then
+    for file in ".pig/branch/$current_branch/index_delete_list/"*; do 
+        if [ -f "$file" ]; then
+            mv "$file" ".pig/branch/$current_branch/deleted_log/"
+        fi
+    done
+fi
+
+total_commit_num=$(head -n 1 .pig/total_commit_num)
+echo "Committed as commit $total_commit_num"
+echo "$commit_num" >> ".pig/branch/$current_branch/commit/commitsNum"
+exit 0

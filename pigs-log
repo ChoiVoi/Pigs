@@ -1,0 +1,20 @@
+#!/bin/dash
+
+if [ ! -d ".pig" ]; then
+    echo "pigs-log: error: pigs repository directory .pig not found" 1>&2
+    exit 1
+fi
+
+current_branch=$(head -n 1 .pig/branch_list)
+
+commit_num=0
+while [ -e ".pig/branch/$current_branch/commit/$commit_num" ]; do
+    commit_num=$((commit_num+1))
+done
+
+commit_num=$((commit_num-1))
+while [ $commit_num -ge 0 ]; do
+    commit_msg=$(cat ".pig/branch/$current_branch/commit/$commit_num/message")
+    echo "$commit_num $commit_msg"
+    commit_num=$((commit_num-1))
+done

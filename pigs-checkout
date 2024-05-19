@@ -1,0 +1,26 @@
+#!/bin/dash
+
+if [ ! -d ".pig" ]; then
+    echo "pigs-checkout: error: pigs repository directory .pig not found"
+    exit 1
+fi
+
+if [ "$1" = "" ]; then
+    echo "usage: pigs-checkout <branch>"
+    exit 1
+fi
+
+current_branch=$(head -n 1 .pig/branch_list)
+
+if [ "$1" = "$current_branch" ]; then
+    echo "Already on '$1'"
+    exit 1
+fi
+
+if [ ! -d ".pig/branch/$1" ]; then
+    echo "pigs-checkout: error: unknown branch '$1'"
+    exit 1
+fi
+
+echo "Switched to branch '$1'"
+echo "$1" > ".pig/branch_list"
